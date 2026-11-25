@@ -2,11 +2,11 @@ import { motion } from "framer-motion";
 import { AlertTriangle, Coins, Cpu, ShoppingBag } from "lucide-react";
 import { REWARD_SHOP } from "../data/initialGameData";
 
-export default function SkillTreePanel({ skills, debuffs, onToggleDebuff, availableGold, onRedeem }) {
+export default function SkillTreePanel({ activeTab, skills, debuffs, onToggleDebuff, availableGold, onRedeem }) {
   return (
     <div className="space-y-6">
       {/* Skill Tree */}
-      <section className="rpg-panel rounded-2xl p-6">
+      <section id="section-skill" className={`rpg-panel rounded-2xl p-5 sm:p-6 scroll-mt-6 ${activeTab === "SKILL" ? "block" : "hidden lg:block"}`}>
         <h2 className="font-display text-xs font-bold tracking-[0.18em] text-cyan-300 uppercase flex items-center gap-2 mb-4">
           <Cpu className="w-4 h-4" /> Skill Mastery
         </h2>
@@ -34,7 +34,7 @@ export default function SkillTreePanel({ skills, debuffs, onToggleDebuff, availa
       </section>
 
       {/* Log Debuff */}
-      <section className="rpg-panel rounded-2xl p-6">
+      <section id="section-debuff" className={`rpg-panel rounded-2xl p-5 sm:p-6 scroll-mt-6 ${activeTab === "DEBUFF" ? "block" : "hidden lg:block"}`}>
         <h2 className="font-display text-xs font-bold tracking-[0.18em] text-rose-400 uppercase flex items-center gap-2 mb-4">
           <AlertTriangle className="w-4 h-4" /> Log Debuff
         </h2>
@@ -55,7 +55,7 @@ export default function SkillTreePanel({ skills, debuffs, onToggleDebuff, availa
       </section>
 
       {/* Reward Shop */}
-      <section className="rpg-panel rounded-2xl p-6">
+      <section id="section-shop" className={`rpg-panel rounded-2xl p-5 sm:p-6 scroll-mt-6 ${activeTab === "SHOP" ? "block" : "hidden lg:block"}`}>
         <h2 className="font-display text-xs font-bold tracking-[0.18em] text-amber-400 uppercase flex items-center gap-2 mb-4">
           <ShoppingBag className="w-4 h-4" /> Reward Shop
         </h2>
