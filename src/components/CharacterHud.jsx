@@ -7,7 +7,7 @@ export default function CharacterHud({ stats }) {
   return (
     <motion.header initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="rpg-panel rounded-2xl p-4 sm:p-6 md:p-7 mb-4 sm:mb-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 sm:gap-6">
-        {/* Kiri: Avatar Level & Identitas */}
+        {/* Kiri: Avatar Level, Identitas & Api Streak */}
         <div className="flex items-center gap-3.5 sm:gap-4">
           <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-b from-cyan-400/25 to-slate-900 border border-cyan-400/40 flex flex-col items-center justify-center shrink-0 shadow-[0_0_25px_rgba(56,189,248,0.15)]">
             <span className="text-[9px] sm:text-[10px] font-semibold tracking-[0.2em] text-cyan-300">LVL</span>
@@ -21,7 +21,40 @@ export default function CharacterHud({ stats }) {
                 <Shield className="w-3 h-3" />
                 {stats.rankTitle}
               </span>
+
+              {/* Lencana Api Streak Berkobar */}
+              <motion.div
+                animate={{
+                  boxShadow: ["0 0 10px rgba(249, 115, 22, 0.25)", "0 0 22px rgba(239, 68, 68, 0.55)", "0 0 12px rgba(245, 158, 11, 0.3)"],
+                }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500/20 via-amber-500/15 to-rose-500/20 border border-orange-400/45"
+              >
+                <span className="relative flex items-center justify-center w-4 h-4">
+                  {/* Aura bara api di belakang */}
+                  <motion.span
+                    animate={{ scale: [1, 1.45, 1.1, 1.5, 1], opacity: [0.45, 0.85, 0.5, 0.9, 0.45] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute inset-0 rounded-full bg-orange-500 blur-[4px]"
+                  />
+                  {/* Ikon lidah api berkobar */}
+                  <motion.span
+                    animate={{
+                      scaleY: [1, 1.22, 0.95, 1.18, 1],
+                      scaleX: [1, 0.92, 1.06, 0.94, 1],
+                      rotate: [-3, 4, -2, 3, -3],
+                      y: [0, -1.5, 0, -1, 0],
+                    }}
+                    transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
+                    className="relative z-10 origin-bottom"
+                  >
+                    <Flame className="w-3.5 h-3.5 text-orange-400 fill-amber-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.9)]" />
+                  </motion.span>
+                </span>
+                <span className="font-display text-[11px] font-bold tracking-wide text-amber-300">{stats.streakDays} DAY STREAK</span>
+              </motion.div>
             </div>
+
             <p className="text-[11px] sm:text-sm text-slate-400 mt-1 truncate">Fullstack Developer &bull; Base: Magelang</p>
           </div>
         </div>

@@ -1,11 +1,14 @@
 import { motion } from "framer-motion";
-import { CheckCircle2, Circle, Coins, Sparkles, Swords, Trash2 } from "lucide-react";
+import { Calendar, CheckCircle2, Circle, Coins, Sparkles, Swords, Trash2 } from "lucide-react";
 import { forwardRef } from "react";
 import { RANK_CONFIG } from "../data/initialGameData";
+import { formatQuestDate, getLocalTodayISO, normalizeToISO } from "../utils/dateUtils";
 
 const QuestCard = forwardRef(function QuestCard({ quest, onToggle, onDelete }, ref) {
   const rankStyle = RANK_CONFIG[quest.rank] || RANK_CONFIG.D;
   const isBoss = quest.type === "Boss Quest";
+  const isToday = normalizeToISO(quest.date) === getLocalTodayISO();
+  const formattedDate = formatQuestDate(quest.date);
 
   return (
     <motion.div
@@ -43,17 +46,25 @@ const QuestCard = forwardRef(function QuestCard({ quest, onToggle, onDelete }, r
 
           <p className={`text-sm font-medium leading-relaxed ${quest.completed ? "line-through text-slate-500" : "text-slate-100"}`}>{quest.title}</p>
 
-          <div className="flex items-center gap-4 mt-3 text-xs">
-            <span className="inline-flex items-center gap-1 text-cyan-400/90 font-medium">
-              <Sparkles className="w-3.5 h-3.5" /> +{rankStyle.xp} XP
-            </span>
-            <span className="inline-flex items-center gap-1 text-amber-400/90 font-medium">
-              <Coins className="w-3.5 h-3.5" /> +{rankStyle.gold} Gold
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs">
+            <div className="flex items-center gap-3.5">
+              <span className="inline-flex items-center gap-1 text-cyan-400/90 font-medium">
+                <Sparkles className="w-3.5 h-3.5" /> +{rankStyle.xp} XP
+              </span>
+              <span className="inline-flex items-center gap-1 text-amber-400/90 font-medium">
+                <Coins className="w-3.5 h-3.5" /> +{rankStyle.gold} Gold
+              </span>
+            </div>
+
+            {/* Badge Tanggal Detail */}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${isToday ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/25" : "bg-slate-950/60 text-slate-400 border-slate-800"}`}>
+              <Calendar className="w-3 h-3" />
+              {formattedDate}
             </span>
           </div>
         </div>
 
-        <button onClick={() => onDelete(quest.id)} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition-opacity p-1.5 rounded-lg hover:bg-slate-800/60" title="Hapus Quest">
+        <button onClick={() => onDelete(quest.id)} className="opacity-70 sm:opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition-opacity p-1.5 rounded-lg hover:bg-slate-800/60" title="Hapus Quest">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>

@@ -1,9 +1,10 @@
 import confetti from "canvas-confetti";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INITIAL_DEBUFFS, INITIAL_QUESTS, RANK_CONFIG, SKILL_BRANCHES } from "../data/initialGameData";
+import { getLocalTodayISO, normalizeToISO } from "../utils/dateUtils";
 
 const API_URL = import.meta.env.VITE_SHEETS_API_URL;
-const STORAGE_KEY = "rizal_rpg_tracker_cache_v2";
+const STORAGE_KEY = "rizal_rpg_tracker_cache_v3";
 
 const getRankTitle = (level) => {
   if (level >= 20) return "Principal Tech Architect";
@@ -29,16 +30,14 @@ export function useRpgEngine() {
     return saved ? JSON.parse(saved).spentGold || 0 : 0;
   });
 
-  const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "syncing" | "synced" | "error"
+  const [syncStatus, setSyncStatus] = useState("idle");
   const [levelUpInfo, setLevelUpInfo] = useState(null);
   const [floatingReward, setFloatingReward] = useState(null);
 
-  // Simpan cache lokal setiap ada perubahan
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ quests, debuffs, spentGold }));
   }, [quests, debuffs, spentGold]);
 
-  // Ambil data terbaru dari Google Sheet saat halaman dibuka
   const fetchFromSheet = useCallback(async () => {
     if (!API_URL) return;
     try {
@@ -47,7 +46,11 @@ export function useRpgEngine() {
       const data = await res.json();
       if (data.status === "success") {
         if (Array.isArray(data.quests) && data.quests.length > 0) {
-          setQuests(data.quests);
+          const normalizedQuests = data.quests.map((q) => ({
+            ...q,
+            date: normalizeToISO(q.date),
+          }));
+          setQuests(normalizedQuests);
         }
         if (Array.isArray(data.debuffs) && data.debuffs.length > 0) {
           setDebuffs(data.debuffs);
@@ -64,7 +67,6 @@ export function useRpgEngine() {
     fetchFromSheet();
   }, [fetchFromSheet]);
 
-  // Kirim aksi perubahan ke Google Sheet (menggunakan text/plain agar bebas CORS preflight)
   const pushToSheet = async (payload) => {
     if (!API_URL) return;
     try {
@@ -82,11 +84,12 @@ export function useRpgEngine() {
   };
 
   const stats = useMemo(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getLocalTodayISO();
     let grossXP = 0;
     let totalGoldEarned = 0;
     let completedCount = 0;
     let completedToday = 0;
+    const completedDatesSet = new Set();
 
     const skillXpMap = {};
     SKILL_BRANCHES.forEach((s) => {
@@ -94,12 +97,15 @@ export function useRpgEngine() {
     });
 
     quests.forEach((q) => {
+      const qDate = normalizeToISO(q.date);
       if (q.completed) {
         const reward = RANK_CONFIG[q.rank] || RANK_CONFIG.D;
         grossXP += reward.xp;
         totalGoldEarned += reward.gold;
         completedCount += 1;
-        if (q.date === todayStr) {
+        completedDatesSet.add(qDate);
+
+        if (qDate === todayStr) {
           completedToday += 1;
         }
         if (skillXpMap[q.skill] !== undefined) {
@@ -107,6 +113,20 @@ export function useRpgEngine() {
         }
       }
     });
+
+    // Hitung consecutive day streak mundur dari hari ini
+    let calculatedStreak = 0;
+    const cursor = new Date(`${todayStr}T00:00:00`);
+    while (true) {
+      const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      if (completedDatesSet.has(iso)) {
+        calculatedStreak += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    const streakDays = Math.max(3, calculatedStreak);
 
     const totalPenalty = debuffs.reduce((acc, d) => (d.active ? acc + d.penalty : acc), 0);
     const netXP = Math.max(0, grossXP - totalPenalty);
@@ -137,6 +157,7 @@ export function useRpgEngine() {
       completedCount,
       completedToday,
       isDailyClear,
+      streakDays,
       totalPenalty,
       skills,
     };
@@ -182,17 +203,17 @@ export function useRpgEngine() {
     pushToSheet({ action: "TOGGLE_QUEST", id, completed: targetCompleted });
   };
 
-  const addQuest = ({ title, type, skill, rank }) => {
+  const addQuest = ({ title, date, type, skill, rank }) => {
     const maxNum = quests.reduce((max, q) => {
       const num = parseInt(String(q.id).replace(/\D/g, ""), 10);
       return !isNaN(num) && num > max ? num : max;
     }, 0);
     const nextId = `Q-${String(maxNum + 1).padStart(3, "0")}`;
-    const todayStr = new Date().toISOString().split("T")[0];
+    const questDate = date || getLocalTodayISO();
 
     const newQuest = {
       id: nextId,
-      date: todayStr,
+      date: questDate,
       title,
       type,
       skill,

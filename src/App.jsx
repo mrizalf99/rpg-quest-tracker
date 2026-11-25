@@ -8,26 +8,49 @@ import QuestCard from "./components/QuestCard";
 import QuickNavCards from "./components/QuickNavCards";
 import SkillTreePanel from "./components/SkillTreePanel";
 import { useRpgEngine } from "./hooks/useRpgEngine";
+import { getLocalTodayISO, normalizeToISO } from "./utils/dateUtils";
 
 export default function App() {
   const { quests, debuffs, stats, syncStatus, fetchFromSheet, levelUpInfo, setLevelUpInfo, floatingReward, toggleQuest, addQuest, deleteQuest, toggleDebuff, redeemReward } = useRpgEngine();
 
   const [activeTab, setActiveTab] = useState("QUEST"); // "QUEST" | "SKILL" | "DEBUFF" | "SHOP"
-  const [filter, setFilter] = useState("ALL");
+  const [filter, setFilter] = useState("TODAY"); // Default langsung menampilkan quest aktif hari ini
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const activeQuestCount = quests.filter((q) => !q.completed).length;
+  const todayISO = getLocalTodayISO();
+  const activeTodayCount = quests.filter((q) => !q.completed && normalizeToISO(q.date) === todayISO).length;
 
-  const filteredQuests = quests.filter((q) => {
-    if (filter === "ACTIVE") return !q.completed;
-    if (filter === "COMPLETED") return q.completed;
-    if (filter === "BOSS") return q.type === "Boss Quest";
-    return true;
-  });
+  // Filter & Urutkan mulai dari tanggal hari ini ke bawah
+  const filteredQuests = quests
+    .filter((q) => {
+      const qDate = normalizeToISO(q.date);
+      if (filter === "TODAY") return !q.completed && qDate === todayISO;
+      if (filter === "ACTIVE") return !q.completed;
+      if (filter === "COMPLETED") return q.completed;
+      if (filter === "BOSS") return q.type === "Boss Quest";
+      return true;
+    })
+    .sort((a, b) => {
+      const dateA = normalizeToISO(a.date);
+      const dateB = normalizeToISO(b.date);
+
+      // Prioritaskan tanggal hari ini paling atas
+      if (dateA === todayISO && dateB !== todayISO) return -1;
+      if (dateB === todayISO && dateA !== todayISO) return 1;
+
+      // Tanggal >= hari ini diurutkan kronologis dari hari ini ke bawah (besok, lusa, dst.)
+      if (dateA >= todayISO && dateB >= todayISO) {
+        return dateA.localeCompare(dateB);
+      }
+      if (dateA >= todayISO && dateB < todayISO) return -1;
+      if (dateB >= todayISO && dateA < todayISO) return 1;
+
+      // Tanggal lampau diurutkan dari yang terbaru ke lama
+      return dateB.localeCompare(dateA);
+    });
 
   const handleSelectNav = (tabId) => {
     setActiveTab(tabId);
-    // Pada mode laptop (layar >= 1024px), arahkan scroll halus ke bagian tujuan
     if (window.innerWidth >= 1024) {
       const targetMap = {
         QUEST: "section-quest",
@@ -41,6 +64,14 @@ export default function App() {
       }
     }
   };
+
+  const filterTabs = [
+    { id: "TODAY", label: "HARI INI" },
+    { id: "ACTIVE", label: "SEMUA AKTIF" },
+    { id: "BOSS", label: "BOSS" },
+    { id: "COMPLETED", label: "SELESAI" },
+    { id: "ALL", label: "SEMUA" },
+  ];
 
   return (
     <div className="min-h-screen w-full py-5 sm:py-8 px-3.5 sm:px-6 lg:px-8">
@@ -82,10 +113,10 @@ export default function App() {
         {/* Top Character HUD */}
         <CharacterHud stats={stats} />
 
-        {/* 4 Quick-Nav Card Boxes (Tab di HP, Quick Jump di Laptop) */}
-        <QuickNavCards activeTab={activeTab} onSelectTab={handleSelectNav} activeQuestCount={activeQuestCount} skillCount={stats.skills.length} totalPenalty={stats.totalPenalty} availableGold={stats.availableGold} />
+        {/* 4 Quick-Nav Card Boxes */}
+        <QuickNavCards activeTab={activeTab} onSelectTab={handleSelectNav} activeQuestCount={activeTodayCount} skillCount={stats.skills.length} totalPenalty={stats.totalPenalty} availableGold={stats.availableGold} />
 
-        {/* Grid Utama: Tab Tunggal di HP, 2 Kolom di Laptop */}
+        {/* Grid Utama */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Kolom Kiri: Quest Board */}
           <main id="section-quest" className={`lg:col-span-8 rpg-panel rounded-2xl p-4 sm:p-6 scroll-mt-6 ${activeTab === "QUEST" ? "block" : "hidden lg:block"}`}>
@@ -101,15 +132,15 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                {["ALL", "ACTIVE", "BOSS", "COMPLETED"].map((tab) => (
+                {filterTabs.map((tab) => (
                   <button
-                    key={tab}
-                    onClick={() => setFilter(tab)}
+                    key={tab.id}
+                    onClick={() => setFilter(tab.id)}
                     className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wider shrink-0 transition-all ${
-                      filter === tab ? "bg-cyan-400 text-slate-950 font-bold" : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
+                      filter === tab.id ? "bg-cyan-400 text-slate-950 font-bold" : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
                     }`}
                   >
-                    {tab}
+                    {tab.label}
                   </button>
                 ))}
 
@@ -122,13 +153,19 @@ export default function App() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <AnimatePresence>
-                {filteredQuests.map((quest) => (
-                  <QuestCard key={quest.id} quest={quest} onToggle={toggleQuest} onDelete={deleteQuest} />
-                ))}
-              </AnimatePresence>
-            </div>
+            {filteredQuests.length === 0 ? (
+              <div className="text-center py-10 px-4 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs sm:text-sm">
+                {filter === "TODAY" ? "Semua quest aktif untuk hari ini sudah tuntas! Cek tab SEMUA AKTIF atau tambah quest baru." : "Tidak ada quest pada kategori ini."}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {filteredQuests.map((quest) => (
+                    <QuestCard key={quest.id} quest={quest} onToggle={toggleQuest} onDelete={deleteQuest} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
           </main>
 
           {/* Kolom Kanan: Skill Mastery, Debuff & Shop */}
