@@ -1,8 +1,9 @@
 import confetti from "canvas-confetti";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INITIAL_DEBUFFS, INITIAL_QUESTS, RANK_CONFIG, SKILL_BRANCHES } from "../data/initialGameData";
 
-const STORAGE_KEY = "rizal_rpg_tracker_v1";
+const API_URL = import.meta.env.VITE_SHEETS_API_URL;
+const STORAGE_KEY = "rizal_rpg_tracker_cache_v2";
 
 const getRankTitle = (level) => {
   if (level >= 20) return "Principal Tech Architect";
@@ -28,12 +29,57 @@ export function useRpgEngine() {
     return saved ? JSON.parse(saved).spentGold || 0 : 0;
   });
 
+  const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "syncing" | "synced" | "error"
   const [levelUpInfo, setLevelUpInfo] = useState(null);
   const [floatingReward, setFloatingReward] = useState(null);
 
+  // Simpan cache lokal setiap ada perubahan
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ quests, debuffs, spentGold }));
   }, [quests, debuffs, spentGold]);
+
+  // Ambil data terbaru dari Google Sheet saat halaman dibuka
+  const fetchFromSheet = useCallback(async () => {
+    if (!API_URL) return;
+    try {
+      setSyncStatus("syncing");
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      if (data.status === "success") {
+        if (Array.isArray(data.quests) && data.quests.length > 0) {
+          setQuests(data.quests);
+        }
+        if (Array.isArray(data.debuffs) && data.debuffs.length > 0) {
+          setDebuffs(data.debuffs);
+        }
+        setSyncStatus("synced");
+      }
+    } catch (err) {
+      console.error("Gagal sinkronisasi dari Google Sheet:", err);
+      setSyncStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFromSheet();
+  }, [fetchFromSheet]);
+
+  // Kirim aksi perubahan ke Google Sheet (menggunakan text/plain agar bebas CORS preflight)
+  const pushToSheet = async (payload) => {
+    if (!API_URL) return;
+    try {
+      setSyncStatus("syncing");
+      await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+      });
+      setSyncStatus("synced");
+    } catch (err) {
+      console.error("Gagal mengirim perubahan ke Google Sheet:", err);
+      setSyncStatus("error");
+    }
+  };
 
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -53,7 +99,7 @@ export function useRpgEngine() {
         grossXP += reward.xp;
         totalGoldEarned += reward.gold;
         completedCount += 1;
-        if (q.date === todayStr || q.date === "2026-11-25") {
+        if (q.date === todayStr) {
           completedToday += 1;
         }
         if (skillXpMap[q.skill] !== undefined) {
@@ -112,11 +158,12 @@ export function useRpgEngine() {
   }, [stats.level, stats.rankTitle]);
 
   const toggleQuest = (id) => {
+    let targetCompleted = false;
     setQuests((prev) =>
       prev.map((q) => {
         if (q.id !== id) return q;
-        const nextCompleted = !q.completed;
-        if (nextCompleted) {
+        targetCompleted = !q.completed;
+        if (targetCompleted) {
           const reward = RANK_CONFIG[q.rank] || RANK_CONFIG.D;
           setFloatingReward({
             id: Date.now(),
@@ -128,31 +175,57 @@ export function useRpgEngine() {
             confetti({ particleCount: 65, spread: 60, origin: { y: 0.7 } });
           }
         }
-        return { ...q, completed: nextCompleted };
+        return { ...q, completed: targetCompleted };
       }),
     );
+
+    pushToSheet({ action: "TOGGLE_QUEST", id, completed: targetCompleted });
   };
 
   const addQuest = ({ title, type, skill, rank }) => {
-    const nextNum = String(quests.length + 1).padStart(3, "0");
+    const maxNum = quests.reduce((max, q) => {
+      const num = parseInt(String(q.id).replace(/\D/g, ""), 10);
+      return !isNaN(num) && num > max ? num : max;
+    }, 0);
+    const nextId = `Q-${String(maxNum + 1).padStart(3, "0")}`;
+    const todayStr = new Date().toISOString().split("T")[0];
+
     const newQuest = {
-      id: `Q-${nextNum}`,
-      date: "2026-11-25",
+      id: nextId,
+      date: todayStr,
       title,
       type,
       skill,
       rank,
       completed: false,
     };
+
     setQuests((prev) => [newQuest, ...prev]);
+    pushToSheet({ action: "ADD_QUEST", ...newQuest });
   };
 
   const deleteQuest = (id) => {
     setQuests((prev) => prev.filter((q) => q.id !== id));
+    pushToSheet({ action: "DELETE_QUEST", id });
   };
 
   const toggleDebuff = (id) => {
-    setDebuffs((prev) => prev.map((d) => (d.id === id ? { ...d, active: !d.active } : d)));
+    let targetDebuff = null;
+    setDebuffs((prev) =>
+      prev.map((d) => {
+        if (d.id !== id) return d;
+        targetDebuff = { ...d, active: !d.active };
+        return targetDebuff;
+      }),
+    );
+
+    if (targetDebuff?.rowIndex) {
+      pushToSheet({
+        action: "TOGGLE_DEBUFF",
+        rowIndex: targetDebuff.rowIndex,
+        active: targetDebuff.active,
+      });
+    }
   };
 
   const redeemReward = (cost) => {
@@ -168,6 +241,8 @@ export function useRpgEngine() {
     quests,
     debuffs,
     stats,
+    syncStatus,
+    fetchFromSheet,
     levelUpInfo,
     setLevelUpInfo,
     floatingReward,

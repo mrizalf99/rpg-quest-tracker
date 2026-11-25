@@ -7,10 +7,6 @@ export default {
         display: ['"Orbitron"', "sans-serif"],
         sans: ['"Plus Jakarta Sans"', "sans-serif"],
       },
-      colors: {
-        obsidian: "#070B14",
-        panel: "#0F172A",
-      },
     },
   },
   plugins: [],
