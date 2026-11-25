@@ -3,6 +3,17 @@ import { AlertTriangle, Award, BarChart3, CheckCircle2, Coins, Flame, ShieldAler
 import { useMemo } from "react";
 import { normalizeToISO } from "../utils/dateUtils";
 
+// Helper fleksibel untuk membaca XP & Gold dari berbagai variasi nama properti di useRpgEngine
+function getQuestXp(q) {
+  const val = q.earnedXp ?? q.earnedXP ?? q.xpEarned ?? q.xp ?? q.XP ?? q.baseXP ?? q.baseXp ?? q.rewardXp ?? q.rewardXP ?? 0;
+  return Number(val) || 0;
+}
+
+function getQuestGold(q) {
+  const val = q.earnedGold ?? q.goldEarned ?? q.gold ?? q.Gold ?? q.baseGold ?? q.rewardGold ?? Math.round(getQuestXp(q) / 2);
+  return Number(val) || 0;
+}
+
 export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
   const analyticsData = useMemo(() => {
     const totalQuests = quests.length;
@@ -11,8 +22,8 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
     const completionRate = totalQuests > 0 ? Math.round((completedQuests.length / totalQuests) * 100) : 0;
 
     // Total XP & Gold dari quest selesai
-    const totalEarnedXp = completedQuests.reduce((sum, q) => sum + Number(q.earnedXp ?? q.xp ?? q.baseXp ?? 0), 0);
-    const totalEarnedGold = completedQuests.reduce((sum, q) => sum + Number(q.earnedGold ?? q.gold ?? Math.round((q.baseXp ?? 0) / 2)), 0);
+    const totalEarnedXp = completedQuests.reduce((sum, q) => sum + getQuestXp(q), 0);
+    const totalEarnedGold = completedQuests.reduce((sum, q) => sum + getQuestGold(q), 0);
 
     // Hitung penalti Debuff aktif
     const activeDebuffs = debuffs.filter((d) => Boolean(d.active));
@@ -30,8 +41,8 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
       dailyMap[iso].total += 1;
       if (q.completed) {
         dailyMap[iso].completed += 1;
-        dailyMap[iso].xp += Number(q.earnedXp ?? q.xp ?? q.baseXp ?? 0);
-        dailyMap[iso].gold += Number(q.earnedGold ?? q.gold ?? 0);
+        dailyMap[iso].xp += getQuestXp(q);
+        dailyMap[iso].gold += getQuestGold(q);
       }
     });
 
@@ -42,14 +53,14 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
     const maxDailyXp = Math.max(...dailyTimeline.map((d) => d.xp), 100);
     const dailyClearDays = Object.values(dailyMap).filter((d) => d.completed >= 3).length;
 
-    // Distribusi Skill (ambil dari stats.skills jika tersedia, atau agregasi dari quests)
+    // Distribusi Skill
     const skillList =
       Array.isArray(stats?.skills) && stats.skills.length > 0
         ? stats.skills.map((s) => ({
             code: s.code || s.id || "GEN",
             name: s.name || s.code || "Skill",
             level: Number(s.level ?? 1),
-            xp: Number(s.xp ?? s.totalXp ?? 0),
+            xp: Number(s.xp ?? s.totalXp ?? s.totalXP ?? 0),
           }))
         : Object.values(
             completedQuests.reduce((acc, q) => {
@@ -62,7 +73,7 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
                   xp: 0,
                 };
               }
-              acc[code].xp += Number(q.earnedXp ?? q.xp ?? q.baseXp ?? 0);
+              acc[code].xp += getQuestXp(q);
               acc[code].level = Math.floor(acc[code].xp / 500) + 1;
               return acc;
             }, {}),
@@ -72,6 +83,10 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
     const maxSkillXp = Math.max(...sortedSkills.map((s) => s.xp), 500);
     const strongestSkill = sortedSkills[0] || null;
     const weakestSkill = sortedSkills[sortedSkills.length - 1] || null;
+
+    // Total XP Bersih (baca dari stats atau hitung dari akumulasi quest - penalti)
+    const totalSkillXp = sortedSkills.reduce((sum, s) => sum + s.xp, 0);
+    const resolvedNetXp = Number(stats?.netXp ?? stats?.netXP ?? stats?.totalXp ?? stats?.totalXP ?? stats?.cleanXp ?? (totalEarnedXp > 0 ? totalEarnedXp - totalPenalty : Math.max(0, totalSkillXp - totalPenalty)));
 
     // Breakdown berdasarkan Rank (S, A, B, C, D, E)
     const ranks = ["S", "A", "B", "C", "D", "E"];
@@ -105,6 +120,7 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
       completedCount: completedQuests.length,
       pendingCount: pendingQuests.length,
       completionRate,
+      resolvedNetXp,
       totalEarnedXp,
       totalEarnedGold,
       activeDebuffs,
@@ -164,7 +180,7 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
               <span>Total XP Terkumpul</span>
               <Sparkles className="w-4 h-4 text-indigo-400" />
             </div>
-            <div className="font-display text-xl sm:text-2xl font-bold text-cyan-300 mt-1.5">{Number(stats?.netXp ?? analyticsData.totalEarnedXp).toLocaleString("id-ID")} XP</div>
+            <div className="font-display text-xl sm:text-2xl font-bold text-cyan-300 mt-1.5">{analyticsData.resolvedNetXp.toLocaleString("id-ID")} XP</div>
             <div className="text-[11px] text-emerald-400 mt-1">
               Level {stats?.level ?? 1} &bull; {stats?.rankTitle || "Vanguard"}
             </div>
@@ -212,7 +228,7 @@ export default function Analytics({ quests = [], debuffs = [], stats = {} }) {
 
                   return (
                     <div key={day.date} className="flex flex-col items-center h-full justify-end group">
-                      <span className="text-[10px] font-bold text-slate-300 mb-1.5 opacity-90 group-hover:text-cyan-300 transition-colors">{day.xp > 0 ? `+${day.xp}` : "0"}</span>
+                      <span className="text-[10px] font-bold text-slate-300 mb-1.5 opacity-90 group-hover:text-cyan-300 transition-colors">{day.xp > 0 ? `+${day.xp.toLocaleString("id-ID")}` : "0"}</span>
 
                       <div className="w-full max-w-[38px] h-32 bg-slate-900/90 rounded-lg p-1 flex items-end border border-slate-800/80">
                         <motion.div
