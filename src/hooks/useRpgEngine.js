@@ -4,7 +4,7 @@ import { INITIAL_DEBUFFS, INITIAL_QUESTS, RANK_CONFIG, SKILL_BRANCHES } from "..
 import { getLocalTodayISO, normalizeToISO } from "../utils/dateUtils";
 
 const API_URL = import.meta.env.VITE_SHEETS_API_URL;
-const STORAGE_KEY = "rizal_rpg_tracker_cache_v3";
+const STORAGE_KEY = "rizal_rpg_tracker_cache_v4";
 
 const getRankTitle = (level) => {
   if (level >= 20) return "Principal Tech Architect";
@@ -46,11 +46,21 @@ export function useRpgEngine() {
       const data = await res.json();
       if (data.status === "success") {
         if (Array.isArray(data.quests) && data.quests.length > 0) {
-          const normalizedQuests = data.quests.map((q) => ({
-            ...q,
-            date: normalizeToISO(q.date),
-            completed: Boolean(q.completed),
-          }));
+          // Pertahankan riwayat completedDate dari cache lokal agar hitungan harian tidak reset saat reload
+          const savedRaw = localStorage.getItem(STORAGE_KEY);
+          const cachedQuests = savedRaw ? JSON.parse(savedRaw).quests || [] : [];
+          const completedDateMap = new Map(cachedQuests.filter((cq) => cq.completed && cq.completedDate).map((cq) => [cq.id, cq.completedDate]));
+
+          const normalizedQuests = data.quests.map((q) => {
+            const isDone = Boolean(q.completed);
+            const normalizedScheduleDate = normalizeToISO(q.date);
+            return {
+              ...q,
+              date: normalizedScheduleDate,
+              completed: isDone,
+              completedDate: isDone ? completedDateMap.get(q.id) || normalizedScheduleDate : null,
+            };
+          });
           setQuests(normalizedQuests);
         }
         if (Array.isArray(data.debuffs) && data.debuffs.length > 0) {
@@ -100,15 +110,17 @@ export function useRpgEngine() {
     });
 
     quests.forEach((q) => {
-      const qDate = normalizeToISO(q.date);
       if (q.completed) {
         const reward = RANK_CONFIG[q.rank] || RANK_CONFIG.D;
+        // Gunakan tanggal aktual saat quest diselesaikan (fallback ke tanggal jadwal quest)
+        const doneDate = q.completedDate ? normalizeToISO(q.completedDate) : normalizeToISO(q.date);
+
         grossXP += reward.xp;
         totalGoldEarned += reward.gold;
         completedCount += 1;
-        completedDatesSet.add(qDate);
+        completedDatesSet.add(doneDate);
 
-        if (qDate === todayStr) {
+        if (doneDate === todayStr) {
           completedToday += 1;
         }
         if (skillXpMap[q.skill] !== undefined) {
@@ -117,7 +129,7 @@ export function useRpgEngine() {
       }
     });
 
-    // Hitung consecutive day streak (jika hari ini belum ada yang selesai, hitung dari kemarin agar streak tidak langsung reset)
+    // Hitung consecutive day streak (tetap pertahankan streak sampai kemarin jika hari ini belum ada yang selesai)
     let calculatedStreak = 0;
     const cursor = new Date(`${todayStr}T00:00:00`);
 
@@ -191,6 +203,7 @@ export function useRpgEngine() {
     if (!currentQuest) return;
 
     const nextCompleted = !currentQuest.completed;
+    const todayStr = getLocalTodayISO();
 
     if (nextCompleted) {
       const reward = RANK_CONFIG[currentQuest.rank] || RANK_CONFIG.D;
@@ -205,7 +218,17 @@ export function useRpgEngine() {
       }
     }
 
-    setQuests((prev) => prev.map((q) => (q.id === id ? { ...q, completed: nextCompleted } : q)));
+    setQuests((prev) =>
+      prev.map((q) =>
+        q.id === id
+          ? {
+              ...q,
+              completed: nextCompleted,
+              completedDate: nextCompleted ? todayStr : null,
+            }
+          : q,
+      ),
+    );
 
     pushToSheet({ action: "TOGGLE_QUEST", id, completed: nextCompleted });
   };
@@ -226,6 +249,7 @@ export function useRpgEngine() {
       skill,
       rank,
       completed: false,
+      completedDate: null,
     };
 
     setQuests((prev) => [newQuest, ...prev]);
