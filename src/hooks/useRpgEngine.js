@@ -42,13 +42,14 @@ export function useRpgEngine() {
     if (!API_URL) return;
     try {
       setSyncStatus("syncing");
-      const res = await fetch(API_URL);
+      const res = await fetch(API_URL, { cache: "no-store" });
       const data = await res.json();
       if (data.status === "success") {
         if (Array.isArray(data.quests) && data.quests.length > 0) {
           const normalizedQuests = data.quests.map((q) => ({
             ...q,
             date: normalizeToISO(q.date),
+            completed: Boolean(q.completed),
           }));
           setQuests(normalizedQuests);
         }
@@ -71,11 +72,13 @@ export function useRpgEngine() {
     if (!API_URL) return;
     try {
       setSyncStatus("syncing");
-      await fetch(API_URL, {
+      const res = await fetch(API_URL, {
         method: "POST",
+        keepalive: true,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSyncStatus("synced");
     } catch (err) {
       console.error("Gagal mengirim perubahan ke Google Sheet:", err);
@@ -114,7 +117,6 @@ export function useRpgEngine() {
       }
     });
 
-    // Hitung consecutive day streak mundur dari hari ini
     let calculatedStreak = 0;
     const cursor = new Date(`${todayStr}T00:00:00`);
     while (true) {
@@ -179,28 +181,27 @@ export function useRpgEngine() {
   }, [stats.level, stats.rankTitle]);
 
   const toggleQuest = (id) => {
-    let targetCompleted = false;
-    setQuests((prev) =>
-      prev.map((q) => {
-        if (q.id !== id) return q;
-        targetCompleted = !q.completed;
-        if (targetCompleted) {
-          const reward = RANK_CONFIG[q.rank] || RANK_CONFIG.D;
-          setFloatingReward({
-            id: Date.now(),
-            xp: reward.xp,
-            gold: reward.gold,
-            skill: q.skill,
-          });
-          if (q.type === "Boss Quest") {
-            confetti({ particleCount: 65, spread: 60, origin: { y: 0.7 } });
-          }
-        }
-        return { ...q, completed: targetCompleted };
-      }),
-    );
+    const currentQuest = quests.find((q) => q.id === id);
+    if (!currentQuest) return;
 
-    pushToSheet({ action: "TOGGLE_QUEST", id, completed: targetCompleted });
+    const nextCompleted = !currentQuest.completed;
+
+    if (nextCompleted) {
+      const reward = RANK_CONFIG[currentQuest.rank] || RANK_CONFIG.D;
+      setFloatingReward({
+        id: Date.now(),
+        xp: reward.xp,
+        gold: reward.gold,
+        skill: currentQuest.skill,
+      });
+      if (currentQuest.type === "Boss Quest") {
+        confetti({ particleCount: 65, spread: 60, origin: { y: 0.7 } });
+      }
+    }
+
+    setQuests((prev) => prev.map((q) => (q.id === id ? { ...q, completed: nextCompleted } : q)));
+
+    pushToSheet({ action: "TOGGLE_QUEST", id, completed: nextCompleted });
   };
 
   const addQuest = ({ title, date, type, skill, rank }) => {
@@ -231,20 +232,18 @@ export function useRpgEngine() {
   };
 
   const toggleDebuff = (id) => {
-    let targetDebuff = null;
-    setDebuffs((prev) =>
-      prev.map((d) => {
-        if (d.id !== id) return d;
-        targetDebuff = { ...d, active: !d.active };
-        return targetDebuff;
-      }),
-    );
+    const currentDebuff = debuffs.find((d) => d.id === id);
+    if (!currentDebuff) return;
 
-    if (targetDebuff?.rowIndex) {
+    const nextActive = !currentDebuff.active;
+
+    setDebuffs((prev) => prev.map((d) => (d.id === id ? { ...d, active: nextActive } : d)));
+
+    if (currentDebuff.rowIndex) {
       pushToSheet({
         action: "TOGGLE_DEBUFF",
-        rowIndex: targetDebuff.rowIndex,
-        active: targetDebuff.active,
+        rowIndex: currentDebuff.rowIndex,
+        active: nextActive,
       });
     }
   };
