@@ -1,305 +1,332 @@
-import confetti from "canvas-confetti";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { INITIAL_DEBUFFS, INITIAL_QUESTS, RANK_CONFIG, SKILL_BRANCHES } from "../data/initialGameData";
-import { getLocalTodayISO, normalizeToISO } from "../utils/dateUtils";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-const API_URL = import.meta.env.VITE_SHEETS_API_URL;
-const STORAGE_KEY = "rizal_rpg_tracker_cache_v4";
+const API_URL = import.meta.env.VITE_SHEETS_API_URL || "";
+const API_KEY = import.meta.env.VITE_API_KEY || "";
 
-const getRankTitle = (level) => {
-  if (level >= 20) return "Principal Tech Architect";
-  if (level >= 15) return "Elite Fullstack Vanguard";
-  if (level >= 10) return "Fullstack Vanguard";
-  if (level >= 5) return "Code Craftsman";
-  return "Novice Developer";
+const RANK_REWARDS = {
+  E: { xp: 25, gold: 10 },
+  D: { xp: 50, gold: 25 },
+  C: { xp: 150, gold: 75 },
+  B: { xp: 300, gold: 150 },
+  A: { xp: 600, gold: 300 },
+  S: { xp: 1200, gold: 600 },
 };
 
+// Helper tanggal hari ini format YYYY-MM-DD sesuai waktu lokal (anti-geser UTC)
+export function getLocalTodayStr(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function useRpgEngine() {
-  const [quests, setQuests] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved).quests : INITIAL_QUESTS;
-  });
+  const [quests, setQuests] = useState([]);
+  const [skills, setSkills] = useState([]);
+  const [debuffs, setDebuffs] = useState([]);
+  const [availableGold, setAvailableGold] = useState(0);
+  const [sheetMeta, setSheetMeta] = useState({ level: null, totalXp: null });
 
-  const [debuffs, setDebuffs] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved).debuffs : INITIAL_DEBUFFS;
-  });
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState(null);
 
-  const [spentGold, setSpentGold] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved).spentGold || 0 : 0;
-  });
+  // ================= FETCH DATA DARI GOOGLE SHEETS =================
+  const fetchGameData = useCallback(async (silent = false) => {
+    if (!API_URL) {
+      setError("VITE_SHEETS_API_URL belum diatur di .env");
+      setLoading(false);
+      return;
+    }
 
-  const [syncStatus, setSyncStatus] = useState("idle");
-  const [levelUpInfo, setLevelUpInfo] = useState(null);
-  const [floatingReward, setFloatingReward] = useState(null);
+    if (!silent) setLoading(true);
+    setSyncing(true);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ quests, debuffs, spentGold }));
-  }, [quests, debuffs, spentGold]);
-
-  const fetchFromSheet = useCallback(async () => {
-    if (!API_URL) return;
     try {
-      setSyncStatus("syncing");
-      const res = await fetch(API_URL, { cache: "no-store" });
-      const data = await res.json();
-      if (data.status === "success") {
-        if (Array.isArray(data.quests) && data.quests.length > 0) {
-          // Pertahankan riwayat completedDate dari cache lokal agar hitungan harian tidak reset saat reload
-          const savedRaw = localStorage.getItem(STORAGE_KEY);
-          const cachedQuests = savedRaw ? JSON.parse(savedRaw).quests || [] : [];
-          const completedDateMap = new Map(cachedQuests.filter((cq) => cq.completed && cq.completedDate).map((cq) => [cq.id, cq.completedDate]));
+      const url = API_KEY ? `${API_URL}?key=${encodeURIComponent(API_KEY)}` : API_URL;
 
-          const normalizedQuests = data.quests.map((q) => {
-            const isDone = Boolean(q.completed);
-            const normalizedScheduleDate = normalizeToISO(q.date);
-            return {
-              ...q,
-              date: normalizedScheduleDate,
-              completed: isDone,
-              completedDate: isDone ? completedDateMap.get(q.id) || normalizedScheduleDate : null,
-            };
-          });
-          setQuests(normalizedQuests);
-        }
-        if (Array.isArray(data.debuffs) && data.debuffs.length > 0) {
-          setDebuffs(data.debuffs);
-        }
-        setSyncStatus("synced");
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.status === "success") {
+        const normalizedQuests = (data.quests || []).map((q) => ({
+          ...q,
+          // Pastikan completedDate selalu terisi untuk quest yang sudah selesai
+          completedDate: q.completed ? q.completedDate || q.date || "" : "",
+        }));
+
+        setQuests(normalizedQuests);
+        setSkills(data.skills || []);
+        setDebuffs(data.debuffs || []);
+        setAvailableGold(Number(data.availableGold) || 0);
+        setSheetMeta({
+          level: data.sheetLevel || null,
+          totalXp: data.sheetTotalXp || null,
+        });
+        setError(null);
+      } else {
+        setError(data.message || "Gagal memuat data dari Google Sheets");
       }
     } catch (err) {
-      console.error("Gagal sinkronisasi dari Google Sheet:", err);
-      setSyncStatus("error");
+      setError("Koneksi ke server Google Apps Script gagal");
+    } finally {
+      setLoading(false);
+      setSyncing(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchFromSheet();
-  }, [fetchFromSheet]);
+    fetchGameData();
+  }, [fetchGameData]);
 
-  const pushToSheet = async (payload) => {
+  // Helper kirim aksi POST ke Apps Script
+  const postAction = async (bodyPayload) => {
     if (!API_URL) return;
+    setSyncing(true);
     try {
-      setSyncStatus("syncing");
-      const res = await fetch(API_URL, {
+      await fetch(API_URL, {
         method: "POST",
-        keepalive: true,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...bodyPayload,
+          ...(API_KEY ? { key: API_KEY } : {}),
+        }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSyncStatus("synced");
+      await fetchGameData(true);
     } catch (err) {
-      console.error("Gagal mengirim perubahan ke Google Sheet:", err);
-      setSyncStatus("error");
+      setError("Gagal menyinkronkan perubahan ke Google Sheets");
+    } finally {
+      setSyncing(false);
     }
   };
 
-  const stats = useMemo(() => {
-    const todayStr = getLocalTodayISO();
-    let grossXP = 0;
-    let totalGoldEarned = 0;
-    let completedCount = 0;
-    let completedToday = 0;
-    const completedDatesSet = new Set();
+  // ================= AKSI QUEST & DEBUFF =================
+  const toggleQuest = async (questId) => {
+    const target = quests.find((q) => q.id === questId);
+    if (!target) return;
 
-    const skillXpMap = {};
-    SKILL_BRANCHES.forEach((s) => {
-      skillXpMap[s.code] = s.baseXp;
-    });
+    const nextCompleted = !target.completed;
+    const todayStr = getLocalTodayStr(0);
 
-    quests.forEach((q) => {
-      if (q.completed) {
-        const reward = RANK_CONFIG[q.rank] || RANK_CONFIG.D;
-        // Gunakan tanggal aktual saat quest diselesaikan (fallback ke tanggal jadwal quest)
-        const doneDate = q.completedDate ? normalizeToISO(q.completedDate) : normalizeToISO(q.date);
-
-        grossXP += reward.xp;
-        totalGoldEarned += reward.gold;
-        completedCount += 1;
-        completedDatesSet.add(doneDate);
-
-        if (doneDate === todayStr) {
-          completedToday += 1;
-        }
-        if (skillXpMap[q.skill] !== undefined) {
-          skillXpMap[q.skill] += reward.xp;
-        }
-      }
-    });
-
-    // Hitung consecutive day streak (tetap pertahankan streak sampai kemarin jika hari ini belum ada yang selesai)
-    let calculatedStreak = 0;
-    const cursor = new Date(`${todayStr}T00:00:00`);
-
-    if (!completedDatesSet.has(todayStr)) {
-      cursor.setDate(cursor.getDate() - 1);
-    }
-
-    while (true) {
-      const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-      if (completedDatesSet.has(iso)) {
-        calculatedStreak += 1;
-        cursor.setDate(cursor.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    const streakDays = calculatedStreak;
-
-    const totalPenalty = debuffs.reduce((acc, d) => (d.active ? acc + d.penalty : acc), 0);
-    const netXP = Math.max(0, grossXP - totalPenalty);
-    const level = Math.floor(netXP / 500) + 1;
-    const currentLevelXP = netXP % 500;
-    const availableGold = Math.max(0, totalGoldEarned - spentGold);
-    const isDailyClear = completedToday >= 3;
-
-    const skills = SKILL_BRANCHES.map((s) => {
-      const xp = skillXpMap[s.code];
-      const skillLevel = Math.floor(xp / 500) + 1;
-      const xpInLevel = xp % 500;
-      return {
-        ...s,
-        xp,
-        level: skillLevel,
-        xpInLevel,
-        progressPct: Math.min(100, Math.round((xpInLevel / 500) * 100)),
-      };
-    });
-
-    return {
-      level,
-      rankTitle: getRankTitle(level),
-      netXP,
-      currentLevelXP,
-      availableGold,
-      completedCount,
-      completedToday,
-      isDailyClear,
-      streakDays,
-      totalPenalty,
-      skills,
-    };
-  }, [quests, debuffs, spentGold]);
-
-  const prevLevelRef = useRef(stats.level);
-
-  useEffect(() => {
-    if (stats.level > prevLevelRef.current) {
-      setLevelUpInfo({ newLevel: stats.level, rankTitle: stats.rankTitle });
-      confetti({
-        particleCount: 110,
-        spread: 80,
-        origin: { y: 0.6 },
-        colors: ["#38bdf8", "#f59e0b", "#10b981"],
-      });
-    }
-    prevLevelRef.current = stats.level;
-  }, [stats.level, stats.rankTitle]);
-
-  const toggleQuest = (id) => {
-    const currentQuest = quests.find((q) => q.id === id);
-    if (!currentQuest) return;
-
-    const nextCompleted = !currentQuest.completed;
-    const todayStr = getLocalTodayISO();
-
-    if (nextCompleted) {
-      const reward = RANK_CONFIG[currentQuest.rank] || RANK_CONFIG.D;
-      setFloatingReward({
-        id: Date.now(),
-        xp: reward.xp,
-        gold: reward.gold,
-        skill: currentQuest.skill,
-      });
-      if (currentQuest.type === "Boss Quest") {
-        confetti({ particleCount: 65, spread: 60, origin: { y: 0.7 } });
-      }
-    }
-
+    // Optimistic Update: langsung catat completedDate = hari ini
     setQuests((prev) =>
       prev.map((q) =>
-        q.id === id
+        q.id === questId
           ? {
               ...q,
               completed: nextCompleted,
-              completedDate: nextCompleted ? todayStr : null,
+              completedDate: nextCompleted ? todayStr : "",
             }
           : q,
       ),
     );
 
-    pushToSheet({ action: "TOGGLE_QUEST", id, completed: nextCompleted });
+    await postAction({
+      action: "TOGGLE_QUEST",
+      id: questId,
+      completed: nextCompleted,
+    });
   };
 
-  const addQuest = ({ title, date, type, skill, rank }) => {
-    const maxNum = quests.reduce((max, q) => {
-      const num = parseInt(String(q.id).replace(/\D/g, ""), 10);
-      return !isNaN(num) && num > max ? num : max;
-    }, 0);
-    const nextId = `Q-${String(maxNum + 1).padStart(3, "0")}`;
-    const questDate = date || getLocalTodayISO();
+  const addQuest = async (newQuest) => {
+    const nextNum = quests.length + 1;
+    const generatedId = newQuest.id || `Q-${String(Date.now()).slice(-4)}-${nextNum}`;
+    const questDate = newQuest.date || getLocalTodayStr(0);
 
-    const newQuest = {
-      id: nextId,
+    const optimisticItem = {
+      id: generatedId,
       date: questDate,
-      title,
-      type,
-      skill,
-      rank,
+      completedDate: "",
+      title: newQuest.title,
+      type: newQuest.type || "Daily Quest",
+      skill: newQuest.skill || "INT",
+      rank: newQuest.rank || "D",
       completed: false,
-      completedDate: null,
     };
 
-    setQuests((prev) => [newQuest, ...prev]);
-    pushToSheet({ action: "ADD_QUEST", ...newQuest });
+    setQuests((prev) => [optimisticItem, ...prev]);
+
+    await postAction({
+      action: "ADD_QUEST",
+      ...optimisticItem,
+    });
   };
 
-  const deleteQuest = (id) => {
-    setQuests((prev) => prev.filter((q) => q.id !== id));
-    pushToSheet({ action: "DELETE_QUEST", id });
+  const deleteQuest = async (questId) => {
+    setQuests((prev) => prev.filter((q) => q.id !== questId));
+    await postAction({
+      action: "DELETE_QUEST",
+      id: questId,
+    });
   };
 
-  const toggleDebuff = (id) => {
-    const currentDebuff = debuffs.find((d) => d.id === id);
-    if (!currentDebuff) return;
+  const toggleDebuff = async (debuff) => {
+    const nextActive = !debuff.active;
+    setDebuffs((prev) => prev.map((d) => (d.id === debuff.id ? { ...d, active: nextActive } : d)));
+    await postAction({
+      action: "TOGGLE_DEBUFF",
+      rowIndex: debuff.rowIndex,
+      active: nextActive,
+    });
+  };
 
-    const nextActive = !currentDebuff.active;
+  // ================= KALKULASI STATS, DAILY CLEAR 3/3 & STREAK =================
+  const stats = useMemo(() => {
+    const todayStr = getLocalTodayStr(0);
 
-    setDebuffs((prev) => prev.map((d) => (d.id === id ? { ...d, active: nextActive } : d)));
+    let grossXp = 0;
+    let earnedGold = 0;
+    let completedTodayCount = 0;
+    let xpToday = 0;
 
-    if (currentDebuff.rowIndex) {
-      pushToSheet({
-        action: "TOGGLE_DEBUFF",
-        rowIndex: currentDebuff.rowIndex,
-        active: nextActive,
-      });
+    // Peta jumlah quest selesai per tanggal penyelesaian (completedDate)
+    const completedByDate = {};
+
+    quests.forEach((q) => {
+      if (!q.completed) return;
+      const reward = RANK_REWARDS[q.rank] || RANK_REWARDS.D;
+      grossXp += reward.xp;
+      earnedGold += reward.gold;
+
+      const doneDate = q.completedDate || q.date;
+      if (doneDate) {
+        completedByDate[doneDate] = (completedByDate[doneDate] || 0) + 1;
+      }
+
+      if (doneDate === todayStr) {
+        completedTodayCount += 1;
+        xpToday += reward.xp;
+      }
+    });
+
+    // Penalti Debuff Aktif
+    const activeDebuffs = debuffs.filter((d) => d.active);
+    const activeDebuffPenalty = activeDebuffs.reduce((sum, d) => sum + (Number(d.penalty) || 0), 0);
+
+    const computedNetXp = Math.max(0, grossXp - activeDebuffPenalty);
+    const totalXp = sheetMeta.totalXp !== null ? sheetMeta.totalXp : computedNetXp;
+    const level = sheetMeta.level !== null ? sheetMeta.level : Math.floor(totalXp / 1000) + 1;
+
+    const xpPerLevel = 1000;
+    const xpInCurrentLevel = totalXp % xpPerLevel;
+    const xpToNextLevel = xpPerLevel - xpInCurrentLevel;
+    const nextLevelXp = level * xpPerLevel;
+    const levelProgressPct = Math.min(100, Math.round((xpInCurrentLevel / xpPerLevel) * 100));
+
+    // Hitung Streak berturut-turut (hari ini + hari-hari sebelumnya yang >= 1 quest selesai)
+    let streak = 0;
+    let checkOffset = completedByDate[todayStr] > 0 ? 0 : -1;
+    while (true) {
+      const dateKey = getLocalTodayStr(checkOffset);
+      if ((completedByDate[dateKey] || 0) > 0) {
+        streak += 1;
+        checkOffset -= 1;
+      } else {
+        break;
+      }
     }
-  };
 
-  const redeemReward = (cost) => {
-    if (stats.availableGold >= cost) {
-      setSpentGold((prev) => prev + cost);
-      confetti({ particleCount: 50, spread: 55, origin: { y: 0.75 } });
-      return true;
-    }
-    return false;
-  };
+    const dailyTarget = 3;
+    const isDailyClear = completedTodayCount >= dailyTarget;
+    const completedQuestsList = quests.filter((q) => q.completed);
+    const pendingQuestsList = quests.filter((q) => !q.completed);
+    const todayQuestsList = quests.filter((q) => q.date === todayStr || q.completedDate === todayStr);
+    const resolvedGold = Number(availableGold) || earnedGold;
+
+    return {
+      todayStr,
+      totalXp,
+      netXp: totalXp,
+      grossXp: totalXp + activeDebuffPenalty,
+      level,
+      xpInCurrentLevel,
+      currentXp: xpInCurrentLevel,
+      xpInLevel: xpInCurrentLevel,
+      nextLevelXp,
+      maxXp: xpPerLevel,
+      xpNeeded: xpPerLevel,
+      xpToNextLevel,
+      remainingXp: xpToNextLevel,
+      levelProgressPct,
+      progressPct: levelProgressPct,
+      availableGold: resolvedGold,
+      gold: resolvedGold,
+      activeDebuffPenalty,
+      debuffPenalty: activeDebuffPenalty,
+      penaltyXp: activeDebuffPenalty,
+      activeDebuffs,
+      completedTodayCount,
+      completedToday: completedTodayCount,
+      dailyTarget,
+      isDailyClear,
+      dailyClear: isDailyClear,
+      xpToday,
+      streak,
+      totalCompletedQuests: completedQuestsList.length,
+      completedQuests: completedQuestsList,
+      pendingQuests: pendingQuestsList,
+      todayQuests: todayQuestsList,
+      skills: skills || [],
+      debuffs: debuffs || [],
+    };
+  }, [quests, debuffs, availableGold, sheetMeta, skills]);
 
   return {
-    quests,
-    debuffs,
+    // Data utama
+    quests: quests || [],
+    skills: skills || [],
+    debuffs: debuffs || [],
+    rewards: [],
+    shopItems: [],
+    logs: [],
+    history: [],
+    todayQuests: stats.todayQuests,
+    completedQuests: stats.completedQuests,
+    pendingQuests: stats.pendingQuests,
+
+    // Statistik lengkap (semua angka dijamin Number, tidak pernah undefined)
     stats,
-    syncStatus,
-    fetchFromSheet,
-    levelUpInfo,
-    setLevelUpInfo,
-    floatingReward,
+
+    // Objek karakter (kompatibel dengan berbagai versi CharacterHud)
+    character: {
+      level: stats.level,
+      xp: stats.totalXp,
+      totalXp: stats.totalXp,
+      netXp: stats.netXp,
+      grossXp: stats.grossXp,
+      currentXp: stats.xpInCurrentLevel,
+      xpInLevel: stats.xpInCurrentLevel,
+      nextLevelXp: stats.nextLevelXp,
+      maxXp: stats.maxXp,
+      xpToNextLevel: stats.xpToNextLevel,
+      progressPct: stats.levelProgressPct,
+      gold: stats.availableGold,
+      availableGold: stats.availableGold,
+      streak: stats.streak,
+      skills: skills || [],
+      debuffs: debuffs || [],
+      activeDebuffs: stats.activeDebuffs,
+    },
+
+    // Status loading & sinkronisasi
+    loading,
+    isLoading: loading,
+    syncing,
+    isSyncing: syncing,
+    syncStatus: error ? "error" : syncing ? "syncing" : "synced",
+    error,
+
+    // Fungsi aksi
     toggleQuest,
+    completeQuest: toggleQuest,
     addQuest,
+    createQuest: addQuest,
     deleteQuest,
+    removeQuest: deleteQuest,
     toggleDebuff,
-    redeemReward,
+    refreshData: () => fetchGameData(false),
+    fetchData: () => fetchGameData(false),
   };
 }

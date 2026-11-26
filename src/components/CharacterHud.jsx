@@ -1,8 +1,19 @@
 import { motion } from "framer-motion";
 import { CheckCircle, Coins, Flame, Shield, Sparkles } from "lucide-react";
 
-export default function CharacterHud({ stats }) {
-  const expPct = Math.min(100, Math.round((stats.currentLevelXP / 500) * 100));
+export default function CharacterHud({ stats = {} }) {
+  const level = Number(stats.level) || 1;
+  const currentLevelXP = Number(stats.currentLevelXP ?? stats.xpInCurrentLevel) || 0;
+  const netXP = Number(stats.netXP ?? stats.netXp ?? stats.totalXp) || 0;
+  const totalPenalty = Number(stats.totalPenalty ?? stats.activeDebuffPenalty) || 0;
+  const availableGold = Number(stats.availableGold ?? stats.gold) || 0;
+  const completedCount = Number(stats.completedCount ?? stats.totalCompletedQuests) || 0;
+  const completedToday = Number(stats.completedToday ?? stats.completedTodayCount) || 0;
+  const streakDays = Number(stats.streakDays ?? stats.streak) || 0;
+  const isDailyClear = Boolean(stats.isDailyClear ?? completedToday >= 3);
+  const rankTitle = stats.rankTitle || (level >= 20 ? "S-Rank Shadow Monarch" : level >= 15 ? "A-Rank Architect" : level >= 10 ? "B-Rank Builder" : level >= 5 ? "C-Rank Adventurer" : "E-Rank Novice");
+
+  const expPct = Math.min(100, Math.round((currentLevelXP / 500) * 100));
 
   return (
     <motion.header initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="rpg-panel rounded-2xl p-4 sm:p-6 md:p-7 mb-4 sm:mb-6">
@@ -11,7 +22,7 @@ export default function CharacterHud({ stats }) {
         <div className="flex items-center gap-3.5 sm:gap-4">
           <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-b from-cyan-400/25 to-slate-900 border border-cyan-400/40 flex flex-col items-center justify-center shrink-0 shadow-[0_0_25px_rgba(56,189,248,0.15)]">
             <span className="text-[9px] sm:text-[10px] font-semibold tracking-[0.2em] text-cyan-300">LVL</span>
-            <span className="font-display text-xl sm:text-2xl font-extrabold text-white leading-none mt-0.5">{stats.level}</span>
+            <span className="font-display text-xl sm:text-2xl font-extrabold text-white leading-none mt-0.5">{level}</span>
           </div>
 
           <div className="min-w-0">
@@ -19,40 +30,14 @@ export default function CharacterHud({ stats }) {
               <h1 className="font-display text-sm sm:text-lg md:text-xl font-bold tracking-wider text-white truncate">MUHAMAD RIZAL FAHLEFI</h1>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-400/25">
                 <Shield className="w-3 h-3" />
-                {stats.rankTitle}
+                {rankTitle}
               </span>
 
-              {/* Lencana Api Streak Berkobar */}
-              <motion.div
-                animate={{
-                  boxShadow: ["0 0 10px rgba(249, 115, 22, 0.25)", "0 0 22px rgba(239, 68, 68, 0.55)", "0 0 12px rgba(245, 158, 11, 0.3)"],
-                }}
-                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500/20 via-amber-500/15 to-rose-500/20 border border-orange-400/45"
-              >
-                <span className="relative flex items-center justify-center w-4 h-4">
-                  {/* Aura bara api di belakang */}
-                  <motion.span
-                    animate={{ scale: [1, 1.45, 1.1, 1.5, 1], opacity: [0.45, 0.85, 0.5, 0.9, 0.45] }}
-                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute inset-0 rounded-full bg-orange-500 blur-[4px]"
-                  />
-                  {/* Ikon lidah api berkobar */}
-                  <motion.span
-                    animate={{
-                      scaleY: [1, 1.22, 0.95, 1.18, 1],
-                      scaleX: [1, 0.92, 1.06, 0.94, 1],
-                      rotate: [-3, 4, -2, 3, -3],
-                      y: [0, -1.5, 0, -1, 0],
-                    }}
-                    transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
-                    className="relative z-10 origin-bottom"
-                  >
-                    <Flame className="w-3.5 h-3.5 text-orange-400 fill-amber-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.9)]" />
-                  </motion.span>
-                </span>
-                <span className="font-display text-[11px] font-bold tracking-wide text-amber-300">{stats.streakDays} DAY STREAK</span>
-              </motion.div>
+              {/* Lencana Api Streak Ringan (GPU-Composited) */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500/20 via-amber-500/15 to-rose-500/20 border border-orange-400/45 shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                <Flame className="w-3.5 h-3.5 text-orange-400 fill-amber-400 animate-pulse" />
+                <span className="font-display text-[11px] font-bold tracking-wide text-amber-300">{streakDays} DAY STREAK</span>
+              </div>
             </div>
 
             <p className="text-[11px] sm:text-sm text-slate-400 mt-1 truncate">Fullstack Developer &bull; Base: Magelang</p>
@@ -66,7 +51,7 @@ export default function CharacterHud({ stats }) {
               <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
               <span>Gold</span>
             </div>
-            <div className="font-display text-sm sm:text-lg font-bold text-amber-400 mt-0.5 sm:mt-1">{stats.availableGold.toLocaleString("id-ID")}</div>
+            <div className="font-display text-sm sm:text-lg font-bold text-amber-400 mt-0.5 sm:mt-1">{availableGold.toLocaleString("id-ID")}</div>
           </div>
 
           <div className="rpg-subcard rounded-xl px-3 py-2.5 sm:px-4 sm:py-3">
@@ -75,16 +60,16 @@ export default function CharacterHud({ stats }) {
               <span>Selesai</span>
             </div>
             <div className="font-display text-sm sm:text-lg font-bold text-slate-100 mt-0.5 sm:mt-1">
-              {stats.completedCount} <span className="text-[10px] sm:text-xs font-sans font-normal text-slate-400">Misi</span>
+              {completedCount} <span className="text-[10px] sm:text-xs font-sans font-normal text-slate-400">Misi</span>
             </div>
           </div>
 
-          <div className={`rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 border transition-colors ${stats.isDailyClear ? "bg-emerald-500/10 border-emerald-400/30" : "rpg-subcard"}`}>
+          <div className={`rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 border transition-colors ${isDailyClear ? "bg-emerald-500/10 border-emerald-400/30" : "rpg-subcard"}`}>
             <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-slate-400">
-              <Flame className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${stats.isDailyClear ? "text-emerald-400" : "text-slate-500"}`} />
-              <span>Harian ({stats.completedToday}/3)</span>
+              <Flame className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isDailyClear ? "text-emerald-400" : "text-slate-500"}`} />
+              <span>Harian ({completedToday}/3)</span>
             </div>
-            <div className={`font-display text-[11px] sm:text-sm font-bold mt-1 tracking-wide ${stats.isDailyClear ? "text-emerald-400" : "text-slate-300"}`}>{stats.isDailyClear ? "CLEAR" : "ACTIVE"}</div>
+            <div className={`font-display text-[11px] sm:text-sm font-bold mt-1 tracking-wide ${isDailyClear ? "text-emerald-400" : "text-slate-300"}`}>{isDailyClear ? "CLEAR" : "ACTIVE"}</div>
           </div>
         </div>
       </div>
@@ -95,12 +80,12 @@ export default function CharacterHud({ stats }) {
           <div className="flex items-center gap-1.5 text-slate-300">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
             <span>
-              XP Bersih: <strong className="text-white font-semibold">{stats.netXP.toLocaleString("id-ID")}</strong>
+              XP Bersih: <strong className="text-white font-semibold">{netXP.toLocaleString("id-ID")}</strong>
             </span>
-            {stats.totalPenalty > 0 && <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 text-[10px] border border-rose-500/20">-{stats.totalPenalty}</span>}
+            {totalPenalty > 0 && <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 text-[10px] border border-rose-500/20">-{totalPenalty}</span>}
           </div>
           <span className="font-display text-[11px] sm:text-xs text-cyan-300">
-            {stats.currentLevelXP}/500 &rarr; Lv.{stats.level + 1}
+            {currentLevelXP}/500 &rarr; Lv.{level + 1}
           </span>
         </div>
 
