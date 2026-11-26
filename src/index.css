@@ -21,9 +21,9 @@
   }
 }
 
+/* Mode HP (< 768px): Solid gelap tanpa backdrop-blur agar scroll ringan */
 .rpg-panel {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(10, 15, 28, 0.92) 100%);
-  backdrop-filter: blur(16px);
+  background: rgba(15, 23, 42, 0.95);
   border: 1px solid rgba(148, 163, 184, 0.14);
   box-shadow:
     0 20px 40px -15px rgba(0, 0, 0, 0.65),
@@ -31,6 +31,15 @@
 }
 
 .rpg-subcard {
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(2, 6, 23, 0.78);
   border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Mode Tablet & Laptop (>= 768px): Aktifkan kembali efek kaca transparan */
+@media (min-width: 768px) {
+  .rpg-panel {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(10, 15, 28, 0.92) 100%);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
 }
