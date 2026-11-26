@@ -111,7 +111,7 @@ export default function App() {
         <CharacterHud stats={stats} />
 
         {/* 4 Quick-Nav Card Boxes */}
-        <QuickNavCards activeTab={activeTab} onSelectTab={handleSelectNav} activeQuestCount={activeTodayCount} skillCount={stats.skills.length} totalPenalty={stats.totalPenalty} availableGold={stats.availableGold} />
+        <QuickNavCards activeTab={activeTab} onSelectTab={handleSelectNav} activeQuestCount={activeTodayCount} skillCount={stats.skills?.length || 0} totalPenalty={stats.totalPenalty || 0} availableGold={stats.availableGold || 0} />
 
         {/* Grid Utama: Lebar Penuh di HP, 2 Kolom Seimbang di Laptop */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -173,7 +173,7 @@ export default function App() {
 
           {/* Kolom Kanan (4 Kolom di Laptop): Skill Mastery, Debuff & Shop */}
           <aside className="lg:col-span-4">
-            <SkillTreePanel activeTab={activeTab} skills={stats.skills} debuffs={debuffs} onToggleDebuff={toggleDebuff} availableGold={stats.availableGold} onRedeem={redeemReward} />
+            <SkillTreePanel activeTab={activeTab} skills={stats.skills || []} debuffs={debuffs || []} onToggleDebuff={toggleDebuff} availableGold={stats.availableGold || 0} onRedeem={redeemReward} />
           </aside>
         </div>
       </div>
