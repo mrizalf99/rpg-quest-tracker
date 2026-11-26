@@ -110,65 +110,68 @@ export default function App() {
         {/* Top Character HUD */}
         <CharacterHud stats={stats} />
 
-        {/* Jam Hitung Mundur "EVERY SECOND COUNTS" ala The Bear */}
-        <EverySecondCountsClock />
-
         {/* 4 Quick-Nav Card Boxes */}
         <QuickNavCards activeTab={activeTab} onSelectTab={handleSelectNav} activeQuestCount={activeTodayCount} skillCount={stats.skills.length} totalPenalty={stats.totalPenalty} availableGold={stats.availableGold} />
 
-        {/* Grid Utama */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Kolom Kiri: Quest Board */}
-          <main id="section-quest" className={`lg:col-span-8 rpg-panel rounded-2xl p-4 sm:p-6 scroll-mt-6 ${activeTab === "QUEST" ? "block" : "hidden lg:block"}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-4 sm:pb-5 mb-4 sm:mb-5 border-b border-slate-800/80">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-xs font-bold tracking-[0.18em] text-white uppercase flex items-center gap-2">
-                  <Swords className="w-4 h-4 text-cyan-400" /> Quest Board
-                </h2>
+        {/* Grid Utama: Lebar Penuh di HP, 2 Kolom Seimbang di Laptop */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+          {/* Kolom Kiri (8 Kolom di Laptop): Jam The Bear + Quest Board */}
+          <div className="lg:col-span-8">
+            {/* Jam Hitung Mundur Statis & Besar ala The Bear */}
+            <EverySecondCountsClock />
 
-                <button onClick={() => setIsModalOpen(true)} className="sm:hidden px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[11px] font-bold tracking-wider inline-flex items-center gap-1">
-                  <Plus className="w-3.5 h-3.5" /> BARU
-                </button>
-              </div>
+            {/* Quest Board */}
+            <main id="section-quest" className={`rpg-panel rounded-2xl p-4 sm:p-6 scroll-mt-6 ${activeTab === "QUEST" ? "block" : "hidden lg:block"}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-4 sm:pb-5 mb-4 sm:mb-5 border-b border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display text-xs font-bold tracking-[0.18em] text-white uppercase flex items-center gap-2">
+                    <Swords className="w-4 h-4 text-cyan-400" /> Quest Board
+                  </h2>
 
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                {filterTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setFilter(tab.id)}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wider shrink-0 transition-all ${
-                      filter === tab.id ? "bg-cyan-400 text-slate-950 font-bold" : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
-                    }`}
-                  >
-                    {tab.label}
+                  <button onClick={() => setIsModalOpen(true)} className="sm:hidden px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[11px] font-bold tracking-wider inline-flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> BARU
                   </button>
-                ))}
+                </div>
 
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="hidden sm:inline-flex ml-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[11px] font-bold tracking-wider items-center gap-1.5 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> QUEST BARU
-                </button>
-              </div>
-            </div>
-
-            {filteredQuests.length === 0 ? (
-              <div className="text-center py-10 px-4 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs sm:text-sm">
-                {filter === "TODAY" ? "Semua quest aktif untuk hari ini sudah tuntas! Cek tab SEMUA AKTIF atau tambah quest baru." : "Tidak ada quest pada kategori ini."}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <AnimatePresence>
-                  {filteredQuests.map((quest) => (
-                    <QuestCard key={quest.id} quest={quest} onToggle={toggleQuest} onDelete={deleteQuest} />
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  {filterTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setFilter(tab.id)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wider shrink-0 transition-all ${
+                        filter === tab.id ? "bg-cyan-400 text-slate-950 font-bold" : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
                   ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </main>
 
-          {/* Kolom Kanan: Skill Mastery, Debuff & Shop */}
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="hidden sm:inline-flex ml-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[11px] font-bold tracking-wider items-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> QUEST BARU
+                  </button>
+                </div>
+              </div>
+
+              {filteredQuests.length === 0 ? (
+                <div className="text-center py-10 px-4 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs sm:text-sm">
+                  {filter === "TODAY" ? "Semua quest aktif untuk hari ini sudah tuntas! Cek tab SEMUA AKTIF atau tambah quest baru." : "Tidak ada quest pada kategori ini."}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <AnimatePresence>
+                    {filteredQuests.map((quest) => (
+                      <QuestCard key={quest.id} quest={quest} onToggle={toggleQuest} onDelete={deleteQuest} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </main>
+          </div>
+
+          {/* Kolom Kanan (4 Kolom di Laptop): Skill Mastery, Debuff & Shop */}
           <aside className="lg:col-span-4">
             <SkillTreePanel activeTab={activeTab} skills={stats.skills} debuffs={debuffs} onToggleDebuff={toggleDebuff} availableGold={stats.availableGold} onRedeem={redeemReward} />
           </aside>
