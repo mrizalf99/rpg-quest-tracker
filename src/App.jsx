@@ -92,7 +92,6 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
-
         {/* Bar Status Koneksi Google Sheet & Tombol Analytics */}
         <div className="flex flex-wrap justify-between sm:justify-end items-center gap-2 mb-3 text-[11px] sm:text-xs">
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-800 text-slate-300">
@@ -119,13 +118,14 @@ export default function App() {
             </button>
           </div>
         </div>
-
         {/* Top Character HUD */}
         <CharacterHud stats={stats} />
-
+        // 1. Tambahkan import di bagian atas src/App.jsx: import EverySecondCountsClock from "./components/EverySecondCountsClock"; // 2. Letakkan tepat di bawah <CharacterHud stats={stats} /> (atau di atasnya):
+        <CharacterHud stats={stats} />
+        {/* Jam Hitung Mundur "EVERY SECOND COUNTS" ala The Bear */}
+        <EverySecondCountsClock />
         {/* 4 Quick-Nav Card Boxes */}
         <QuickNavCards activeTab={activeTab} onSelectTab={handleSelectNav} activeQuestCount={activeTodayCount} skillCount={stats.skills.length} totalPenalty={stats.totalPenalty} availableGold={stats.availableGold} />
-
         {/* Tampilan Analytics vs Grid Utama */}
         {activeTab === "ANALYTICS" ? (
           <Analytics quests={quests} debuffs={debuffs} stats={stats} />
