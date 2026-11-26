@@ -117,8 +117,14 @@ export function useRpgEngine() {
       }
     });
 
+    // Hitung consecutive day streak (jika hari ini belum ada yang selesai, hitung dari kemarin agar streak tidak langsung reset)
     let calculatedStreak = 0;
     const cursor = new Date(`${todayStr}T00:00:00`);
+
+    if (!completedDatesSet.has(todayStr)) {
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
     while (true) {
       const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
       if (completedDatesSet.has(iso)) {
@@ -128,7 +134,7 @@ export function useRpgEngine() {
         break;
       }
     }
-    const streakDays = Math.max(3, calculatedStreak);
+    const streakDays = calculatedStreak;
 
     const totalPenalty = debuffs.reduce((acc, d) => (d.active ? acc + d.penalty : acc), 0);
     const netXP = Math.max(0, grossXP - totalPenalty);
